@@ -17,6 +17,13 @@ import (
 
 type testWrapperHandler func(ctx context.Context, input []byte) (interface{}, error)
 
+//SetMarshal set encoder used for serializes the response.
+func (handler testWrapperHandler) SetMarshal(encoder func(interface{}) ([]byte, error)) {
+}
+
+//SetUnmarshal set encoder used for serializes the request.
+func (handler testWrapperHandler) SetUnmarshal(decoder func(data []byte, v interface{}) error) {
+}
 func (h testWrapperHandler) Invoke(ctx context.Context, payload []byte) ([]byte, error) {
 	response, err := h(ctx, payload)
 	if err != nil {

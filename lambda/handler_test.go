@@ -3,7 +3,9 @@
 package lambda
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -197,6 +199,72 @@ func TestInvokes(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, testCase.expected.val, string(response))
 			}
+		})
+	}
+}
+
+func TestInvokeResponseStructs(t *testing.T) {
+	type testStructPerson = struct {
+		Name   string
+		Age    int64
+		Active bool
+	}
+
+	type testStructURL = struct {
+		URL string
+	}
+	testCases := []struct {
+		name          string
+		customMarshal bool
+		expected      expected
+		handler       interface{}
+	}{
+		{
+			name:     "basic input struct serialization ",
+			expected: expected{`{"Name":"Aws","Age":64,"Active":true}`, nil},
+			handler: func() (testStructPerson, error) {
+				return testStructPerson{"Aws", 64, true}, nil
+			},
+		},
+		{
+			name:          "basic input struct serialization URL",
+			customMarshal: true,
+			expected:      expected{`{"URL":"https://github.com/aws/aws-lambda-go?hello=world&go=lang"}` + "\n", nil},
+			handler: func() (testStructURL, error) {
+				return testStructURL{URL: `https://github.com/aws/aws-lambda-go?hello=world&go=lang`}, nil
+			},
+		},
+		{
+			name:     "basic input struct serialization URL",
+			expected: expected{`{"URL":"https://github.com/aws/aws-lambda-go?hello=world\u0026go=lang"}`, nil},
+			handler: func() (testStructURL, error) {
+				return testStructURL{URL: `https://github.com/aws/aws-lambda-go?hello=world&go=lang`}, nil
+			},
+		},
+	}
+	for i, testCase := range testCases {
+		t.Run(fmt.Sprintf("testCase[%d] %s", i, testCase.name), func(t *testing.T) {
+			lambdaHandler := NewHandler(testCase.handler)
+			if testCase.customMarshal {
+				JSONMarshal := func(t interface{}) ([]byte, error) {
+					buffer := &bytes.Buffer{}
+					encoder := json.NewEncoder(buffer)
+					encoder.SetEscapeHTML(false)
+					err := encoder.Encode(t)
+					return buffer.Bytes(), err
+				}
+				lambdaHandler.SetMarshal(JSONMarshal)
+			}
+
+			response, err := lambdaHandler.Invoke(context.TODO(), []byte(`"Lambda"`))
+			if testCase.expected.err != nil {
+				assert.Equal(t, testCase.expected.err, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, testCase.expected.val, string(response))
+			}
+			lambdaHandler.SetMarshal(json.Marshal)
+			lambdaHandler.SetUnmarshal(json.Unmarshal)
 		})
 	}
 }

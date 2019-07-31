@@ -11,8 +11,31 @@ import (
 	"github.com/aws/aws-lambda-go/lambda/handlertrace"
 )
 
+//Marshal encoder used when handler taking request
+var marshalFunc func(interface{}) ([]byte, error)
+
+//Unmarshal encoder used when using handler serializes the response
+var unmarshalFunc func(data []byte, v interface{}) error
+
+func init() {
+	marshalFunc = json.Marshal
+	unmarshalFunc = json.Unmarshal
+}
+
 type Handler interface {
 	Invoke(ctx context.Context, payload []byte) ([]byte, error)
+	SetMarshal(encoder func(interface{}) ([]byte, error))
+	SetUnmarshal(decoder func(data []byte, v interface{}) error)
+}
+
+//SetMarshal set encoder used for serializes the response.
+func (handler lambdaHandler) SetMarshal(encoder func(interface{}) ([]byte, error)) {
+	marshalFunc = encoder
+}
+
+//SetUnmarshal set encoder used for serializes the request.
+func (handler lambdaHandler) SetUnmarshal(decoder func(data []byte, v interface{}) error) {
+	unmarshalFunc = decoder
 }
 
 // lambdaHandler is the generic function type
@@ -26,7 +49,7 @@ func (handler lambdaHandler) Invoke(ctx context.Context, payload []byte) ([]byte
 		return nil, err
 	}
 
-	responseBytes, err := json.Marshal(response)
+	responseBytes, err := marshalFunc(response)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +135,7 @@ func NewHandler(handlerFunc interface{}) Handler {
 			eventType := handlerType.In(handlerType.NumIn() - 1)
 			event := reflect.New(eventType)
 
-			if err := json.Unmarshal(payload, event.Interface()); err != nil {
+			if err := unmarshalFunc(payload, event.Interface()); err != nil {
 				return nil, err
 			}
 			if nil != trace.RequestEvent {
